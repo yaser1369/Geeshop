@@ -1,0 +1,6 @@
+{
+  "name": "ققنوس شاپ",
+  "description": "صندوق فروشگاهی، مدیریت انبار و حسابداری دفتری پوشاک ققنوس شاپ با قابلیت صدور فاکتور، بارکد و اتصال به کارتخوان",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

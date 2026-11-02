@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Outer Phoenix Wings Left and Right -->
+    <path
+        android:pathData="M54,28 C56,25 61,24 64,27 C61,31 58,34 57,38 C65,34 74,36 80,44 C84,50 82,59 78,64 C76,57 71,51 64,49 C69,55 70,62 67,69 C65,74 59,79 54,82 C49,79 43,74 41,69 C38,62 39,55 44,49 C37,51 32,57 30,64 C26,59 24,50 28,44 C34,36 43,34 51,38 C50,34 47,31 44,27 C47,24 52,25 54,28 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="54"
+                android:startY="24"
+                android:endX="54"
+                android:endY="82"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FFE082" />
+                <item android:offset="0.3" android:color="#FFB300" />
+                <item android:offset="0.7" android:color="#FF6F00" />
+                <item android:offset="1.0" android:color="#D84315" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Center Hanger & Crown Fire Feature -->
+    <path
+        android:pathData="M54,34 C56.2,34 58,35.8 58,38 C58,39.7 56.9,41.2 55.4,41.7 L55.4,45 L62,49 C63.5,49.9 64,51.8 63.2,53.3 C62.3,54.8 60.4,55.3 58.9,54.5 L54,51.5 L49.1,54.5 C47.6,55.3 45.7,54.8 44.8,53.3 C44,51.8 44.5,49.9 46,49 L52.6,45 L52.6,41.7 C51.1,41.2 50,39.7 50,38 C50,35.8 51.8,34 54,34 Z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Radiant Ember Glow Center -->
+    <path
+        android:pathData="M54,56 C57,59 58,63 56,67 C54,71 54,73 54,73 C54,73 54,71 52,67 C50,63 51,59 54,56 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="54"
+                android:startY="56"
+                android:endX="54"
+                android:endY="73"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FFF9C4" />
+                <item android:offset="1.0" android:color="#FF9100" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>
