@@ -53,6 +53,10 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
+    val settingsPreferences = com.example.data.model.SettingsPreferences(application)
+    val receiptConfig: StateFlow<com.example.data.model.ReceiptConfig> = settingsPreferences.receiptConfig
+    val hardwareConfig: StateFlow<com.example.data.model.HardwareConfig> = settingsPreferences.hardwareConfig
+
     // Active User Role: "ADMIN" or "SELLER"
     private val _currentRole = MutableStateFlow("ADMIN")
     val currentRole: StateFlow<String> = _currentRole.asStateFlow()
@@ -139,13 +143,17 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             repository.initializeDefaultsIfNeeded()
             refreshReport()
         }
+        if (firebaseSyncManager.currentUser != null) {
+            firebaseSyncManager.startRealtimeSync(AppDatabase.getDatabase(application), viewModelScope)
+        }
     }
 
     fun setTab(tab: ScreenTab) {
         // If seller tries to access admin-only tabs, block or notify
-        if (_currentRole.value == "SELLER" && (tab == ScreenTab.INVENTORY || tab == ScreenTab.REPORTS)) {
+        // Seller only blocked from inventory; reports are allowed
+        if (_currentRole.value == "SELLER" && tab == ScreenTab.INVENTORY) {
             viewModelScope.launch {
-                _toastEvent.emit("دسترسی محدود: این بخش مخصوص مدیر است. لطفاً نقش مدیر را فعال کنید.")
+                _toastEvent.emit("دسترسی محدود: بخش مدیریت انبار مخصوص مدیر است.")
             }
             return
         }
@@ -154,8 +162,30 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
     fun switchRole(newRole: String) {
         _currentRole.value = newRole
-        if (newRole == "SELLER" && (_currentTab.value == ScreenTab.INVENTORY || _currentTab.value == ScreenTab.REPORTS)) {
+        if (newRole == "SELLER" && _currentTab.value == ScreenTab.INVENTORY) {
             _currentTab.value = ScreenTab.POS
+        }
+    }
+
+    fun saveReceiptConfig(config: com.example.data.model.ReceiptConfig) {
+        settingsPreferences.saveReceiptConfig(config)
+        viewModelScope.launch {
+            _toastEvent.emit("تنظیمات فاکتور با موفقیت ذخیره شد")
+        }
+    }
+
+    fun saveHardwareConfig(config: com.example.data.model.HardwareConfig) {
+        settingsPreferences.saveHardwareConfig(config)
+        viewModelScope.launch {
+            _toastEvent.emit("تنظیمات کارتخوان و پرینتر با موفقیت ذخیره شد")
+        }
+    }
+
+    fun deleteOrder(orderId: String) {
+        viewModelScope.launch {
+            repository.deleteOrderAndRestoreStock(orderId)
+            refreshReport()
+            _toastEvent.emit("فاکتور ابطال شد و موجودی اقلام به انبار بازگشت داده شد.")
         }
     }
 
@@ -418,7 +448,8 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             _isSyncing.value = false
             result.onSuccess { user ->
                 _firebaseUser.value = user
-                _toastEvent.emit("اتصال به حساب گوگل با موفقیت انجام شد: ${user.email ?: ""}")
+                firebaseSyncManager.startRealtimeSync(AppDatabase.getDatabase(getApplication()), viewModelScope)
+                _toastEvent.emit("اتصال به حساب گوگل و همگام‌سازی ابری با موفقیت برقرار شد: ${user.email ?: ""}")
             }.onFailure { err ->
                 _toastEvent.emit("خطا در ورود به گوگل: ${err.message}")
             }
@@ -431,6 +462,38 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _toastEvent.emit("از حساب گوگل خارج شدید")
         }
+    }
+
+    suspend fun getOrderWithItems(orderId: String): Pair<Order, List<OrderItem>>? {
+        return repository.getOrderWithItems(orderId)
+    }
+
+    fun updateOrder(
+        orderId: String,
+        updatedItems: List<OrderItem>,
+        discountAmount: Long,
+        paymentType: String,
+        customerId: String?,
+        customerName: String?,
+        notes: String
+    ) {
+        viewModelScope.launch {
+            repository.updateOrderWithStockDelta(
+                orderId = orderId,
+                updatedItems = updatedItems,
+                discountAmount = discountAmount,
+                paymentType = paymentType,
+                customerId = customerId,
+                customerName = customerName,
+                notes = notes
+            )
+            refreshReport()
+            _toastEvent.emit("فاکتور با موفقیت ویرایش و موجودی انبار تنظیم شد")
+        }
+    }
+
+    suspend fun exportFullBackupJson(): String {
+        return repository.generateComprehensiveBackupJson()
     }
 
     fun backupToFirebase() {

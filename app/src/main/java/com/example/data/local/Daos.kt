@@ -43,6 +43,9 @@ interface ProductDao {
     @Query("UPDATE products SET stockQuantity = stockQuantity - :qty, updatedAt = :now WHERE id = :id")
     suspend fun deductStock(id: String, qty: Int, now: Long = System.currentTimeMillis())
 
+    @Query("UPDATE products SET stockQuantity = stockQuantity + :qty, updatedAt = :now WHERE id = :id")
+    suspend fun restoreStock(id: String, qty: Int, now: Long = System.currentTimeMillis())
+
     @Query("SELECT COUNT(*) FROM products")
     suspend fun countProducts(): Int
 }
@@ -73,6 +76,12 @@ interface OrderDao {
     @Transaction
     @Query("SELECT * FROM orders WHERE id = :orderId LIMIT 1")
     suspend fun getOrderById(orderId: String): Order?
+
+    @Query("DELETE FROM orders WHERE id = :orderId")
+    suspend fun deleteOrderById(orderId: String)
+
+    @Query("DELETE FROM order_items WHERE orderId = :orderId")
+    suspend fun deleteOrderItemsByOrderId(orderId: String)
 }
 
 @Dao

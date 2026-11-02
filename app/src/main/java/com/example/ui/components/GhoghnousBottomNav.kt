@@ -76,7 +76,7 @@ fun GhoghnousBottomNav(
             label = "گزارشات",
             selectedIcon = Icons.Filled.Assessment,
             unselectedIcon = Icons.Outlined.Assessment,
-            adminOnly = true
+            adminOnly = false
         ),
         NavItemData(
             tab = ScreenTab.SYNC_SETTINGS,

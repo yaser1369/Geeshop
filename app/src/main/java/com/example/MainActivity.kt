@@ -118,10 +118,13 @@ fun GhoghnousShopApp(viewModel: ShopViewModel) {
         }
     }
 
+    val receiptConfig by viewModel.receiptConfig.collectAsState()
+
     // Modal Receipt Dialog on checkout
     if (lastCompletedReceipt != null) {
         ReceiptDialog(
             receiptState = lastCompletedReceipt!!,
+            config = receiptConfig,
             onDismiss = { viewModel.closeReceiptModal() }
         )
     }

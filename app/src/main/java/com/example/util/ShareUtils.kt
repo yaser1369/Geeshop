@@ -6,6 +6,7 @@ import android.net.Uri
 import com.example.data.model.Customer
 import com.example.data.model.Order
 import com.example.data.model.OrderItem
+import com.example.data.model.ReceiptConfig
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -14,10 +15,17 @@ object ShareUtils {
 
     private val dateFormat = SimpleDateFormat("yyyy/MM/dd - HH:mm", Locale.getDefault())
 
-    fun formatOrderReceipt(order: Order, items: List<OrderItem>): String {
+    fun formatOrderReceipt(
+        order: Order,
+        items: List<OrderItem>,
+        config: ReceiptConfig = ReceiptConfig()
+    ): String {
         val dateStr = dateFormat.format(Date(order.createdAt))
         val sb = StringBuilder()
-        sb.append("🔥 فاکتور فروش فروشگاه پوشاک ققنوس شاپ 🔥\n")
+        sb.append("🔥 ${config.shopTitle} 🔥\n")
+        if (config.shopSlogan.isNotBlank()) {
+            sb.append("${config.shopSlogan}\n")
+        }
         sb.append("═══════════════════════════\n")
         sb.append("شماره فاکتور: #${CurrencyUtils.toPersianDigits(order.orderNumber.toString())}\n")
         sb.append("تاریخ: ${CurrencyUtils.toPersianDigits(dateStr)}\n")
@@ -52,8 +60,17 @@ object ShareUtils {
         sb.append("مبلغ نهایی قابل پرداخت: ${CurrencyUtils.formatRials(order.finalPayable)}\n")
         sb.append("معادل تومانی: ${CurrencyUtils.formatTomans(order.finalPayable)}\n")
         sb.append("═══════════════════════════\n")
-        sb.append("از اعتماد و خرید شما سپاسگزاریم ✨\n")
-        sb.append("بوتیک پوشاک ققنوس شاپ\n")
+        if (config.shopAddress.isNotBlank()) {
+            sb.append("📍 آدرس: ${config.shopAddress}\n")
+        }
+        if (config.shopPhone.isNotBlank()) {
+            sb.append("📞 تلفن تماس: ${config.shopPhone}\n")
+        }
+        if (config.socialId.isNotBlank()) {
+            sb.append("📱 اینستاگرام/تلگرام: ${config.socialId}\n")
+        }
+        sb.append("───────────────────────────\n")
+        sb.append("${config.footerMessage}\n")
         return sb.toString()
     }
 
@@ -77,7 +94,6 @@ object ShareUtils {
 
     fun shareToWhatsApp(context: Context, phoneNumber: String, message: String) {
         try {
-            // Clean phone number (e.g. 0912... -> 98912...)
             var cleaned = phoneNumber.replace("[^0-9]".toRegex(), "")
             if (cleaned.startsWith("0")) {
                 cleaned = "98" + cleaned.substring(1)
@@ -86,7 +102,6 @@ object ShareUtils {
             val intent = Intent(Intent.ACTION_VIEW, uri)
             context.startActivity(intent)
         } catch (_: Exception) {
-            // Fallback to general share
             shareGeneral(context, message, "ارسال به واتساپ")
         }
     }

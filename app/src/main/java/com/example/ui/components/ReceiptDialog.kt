@@ -62,12 +62,13 @@ import com.example.util.ShareUtils
 @Composable
 fun ReceiptDialog(
     receiptState: CompletedReceiptState,
+    config: com.example.data.model.ReceiptConfig = com.example.data.model.ReceiptConfig(),
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
     val order = receiptState.order
     val items = receiptState.items
-    val formattedText = ShareUtils.formatOrderReceipt(order, items)
+    val formattedText = ShareUtils.formatOrderReceipt(order, items, config)
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -164,16 +165,18 @@ fun ReceiptDialog(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "ققنوس شاپ",
+                            text = config.shopTitle,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 18.sp,
                             color = Color.Black
                         )
-                        Text(
-                            text = "بوتیک پوشاک زنانه و مردانه",
-                            fontSize = 11.sp,
-                            color = Color.DarkGray
-                        )
+                        if (config.shopSlogan.isNotBlank()) {
+                            Text(
+                                text = config.shopSlogan,
+                                fontSize = 11.sp,
+                                color = Color.DarkGray
+                            )
+                        }
                         Text(
                             text = "فاکتور حرارتی استاندارد ۸۰ میلی‌متری",
                             fontSize = 10.sp,
@@ -296,6 +299,48 @@ fun ReceiptDialog(
                             color = Color.DarkGray,
                             modifier = Modifier.padding(top = 2.dp)
                         )
+
+                        if (config.shopAddress.isNotBlank() || config.shopPhone.isNotBlank() || config.socialId.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Divider(color = Color.LightGray, thickness = 1.dp)
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            if (config.shopAddress.isNotBlank()) {
+                                Text(
+                                    text = "📍 ${config.shopAddress}",
+                                    fontSize = 10.sp,
+                                    color = Color.DarkGray,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                            if (config.shopPhone.isNotBlank()) {
+                                Text(
+                                    text = "📞 ${config.shopPhone}",
+                                    fontSize = 10.sp,
+                                    color = Color.DarkGray,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                            if (config.socialId.isNotBlank()) {
+                                Text(
+                                    text = "📱 ${config.socialId}",
+                                    fontSize = 10.sp,
+                                    color = Color.DarkGray,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+
+                        if (config.footerMessage.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = config.footerMessage,
+                                fontSize = 10.sp,
+                                color = Color.Gray,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
                     }
                 }
 

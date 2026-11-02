@@ -10,7 +10,13 @@ import com.example.data.model.UserCredential
 import com.example.util.BarcodeUtils
 import com.example.util.SecurityUtils
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import org.json.JSONArray
+import org.json.JSONObject
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 
 data class CartItem(
@@ -238,6 +244,224 @@ class ShopRepository(private val db: AppDatabase) {
     }
 
     suspend fun getOrderItems(orderId: String): List<OrderItem> = orderDao.getOrderItems(orderId)
+
+    suspend fun deleteOrderAndRestoreStock(orderId: String) {
+        val order = orderDao.getOrderById(orderId) ?: return
+        val items = orderDao.getOrderItems(orderId)
+
+        // 1. Restore product stock in warehouse
+        for (item in items) {
+            productDao.restoreStock(item.productId, item.quantity)
+        }
+
+        // 2. If it was a debt/credit purchase, reduce the customer's balance
+        if (order.paymentType == "DEBT" && !order.customerId.isNullOrBlank()) {
+            customerDao.payDebt(order.customerId, order.finalPayable)
+            customerDao.insertDebtRecord(
+                DebtRecord(
+                    customerId = order.customerId,
+                    type = "CREDIT",
+                    amount = order.finalPayable,
+                    description = "ابطال و حذف فاکتور #${order.orderNumber} (بازگشت کالا)"
+                )
+            )
+        }
+
+        // 3. Delete order and items from database
+        orderDao.deleteOrderItemsByOrderId(orderId)
+        orderDao.deleteOrderById(orderId)
+    }
+
+    suspend fun getOrderWithItems(orderId: String): Pair<Order, List<OrderItem>>? {
+        val order = orderDao.getOrderById(orderId) ?: return null
+        val items = orderDao.getOrderItems(orderId)
+        return Pair(order, items)
+    }
+
+    suspend fun updateOrderWithStockDelta(
+        orderId: String,
+        updatedItems: List<OrderItem>,
+        discountAmount: Long,
+        paymentType: String,
+        customerId: String?,
+        customerName: String?,
+        notes: String
+    ) {
+        val oldOrder = orderDao.getOrderById(orderId) ?: return
+        val oldItems = orderDao.getOrderItems(orderId)
+
+        // 1. Calculate stock adjustments: diff = newQuantity - oldQuantity
+        val oldQtyMap = oldItems.associate { it.productId to it.quantity }
+        val newQtyMap = updatedItems.associate { it.productId to it.quantity }
+        val allProductIds = (oldQtyMap.keys + newQtyMap.keys).toSet()
+
+        for (pid in allProductIds) {
+            val oldQty = oldQtyMap[pid] ?: 0
+            val newQty = newQtyMap[pid] ?: 0
+            val diff = newQty - oldQty
+            if (diff > 0) {
+                // More sold -> deduct from stock
+                productDao.deductStock(pid, diff)
+            } else if (diff < 0) {
+                // Less sold -> return back to warehouse
+                productDao.restoreStock(pid, -diff)
+            }
+        }
+
+        // 2. Recalculate financial amounts
+        val newTotalAmount = updatedItems.sumOf { it.unitPrice * it.quantity }
+        val newFinalPayable = (newTotalAmount - discountAmount).coerceAtLeast(0L)
+
+        // 3. Balance customer debt if old or new order used DEBT
+        if (oldOrder.paymentType == "DEBT" && !oldOrder.customerId.isNullOrBlank()) {
+            customerDao.payDebt(oldOrder.customerId, oldOrder.finalPayable)
+            customerDao.insertDebtRecord(
+                DebtRecord(
+                    customerId = oldOrder.customerId,
+                    type = "CREDIT",
+                    amount = oldOrder.finalPayable,
+                    description = "بستانکاری بابت اصلاح و ویرایش فاکتور #${oldOrder.orderNumber}"
+                )
+            )
+        }
+        if (paymentType == "DEBT" && !customerId.isNullOrBlank()) {
+            customerDao.addDebt(customerId, newFinalPayable)
+            customerDao.insertDebtRecord(
+                DebtRecord(
+                    customerId = customerId,
+                    type = "DEBIT",
+                    amount = newFinalPayable,
+                    description = "بدهی جدید ناشی از اصلاح فاکتور #${oldOrder.orderNumber}"
+                )
+            )
+        }
+
+        // 4. Replace items in database
+        orderDao.deleteOrderItemsByOrderId(orderId)
+        val normalizedItems = updatedItems.map { it.copy(subtotal = it.unitPrice * it.quantity) }
+        orderDao.insertOrderItems(normalizedItems)
+
+        // 5. Update order record
+        val updatedOrder = oldOrder.copy(
+            customerId = customerId,
+            customerName = customerName,
+            totalAmount = newTotalAmount,
+            discountAmount = discountAmount,
+            finalPayable = newFinalPayable,
+            paymentType = paymentType,
+            isSettled = paymentType != "DEBT",
+            notes = notes
+        )
+        orderDao.insertOrder(updatedOrder)
+    }
+
+    suspend fun generateComprehensiveBackupJson(): String {
+        val productsList = productDao.getAllProducts().first()
+        val customersList = customerDao.getAllCustomers().first()
+        val ordersList = orderDao.getAllOrders().first()
+
+        val root = JSONObject()
+
+        // 1. Metadata Object
+        val metadata = JSONObject()
+        metadata.put("appName", "ققنوس شاپ (Ghoghnous Shop)")
+        metadata.put("appId", "com.aistudio.ghoghnous.shop")
+        metadata.put("version", "1.2.0")
+        val now = System.currentTimeMillis()
+        metadata.put("exportedAtTimestamp", now)
+        val dateFormatted = SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date(now))
+        metadata.put("exportedAtFormatted", dateFormatted)
+
+        val stats = JSONObject()
+        stats.put("totalProductsCount", productsList.size)
+        stats.put("totalCustomersCount", customersList.size)
+        stats.put("totalOrdersCount", ordersList.size)
+        stats.put("totalRevenueRials", ordersList.sumOf { it.finalPayable })
+        stats.put("totalDiscountsRials", ordersList.sumOf { it.discountAmount })
+        stats.put("totalCustomerDebtRials", customersList.sumOf { it.currentDebt })
+        metadata.put("stats", stats)
+
+        root.put("metadata", metadata)
+
+        // 2. Data Object
+        val data = JSONObject()
+
+        // Products Array
+        val productsArray = JSONArray()
+        for (p in productsList) {
+            val obj = JSONObject()
+            obj.put("id", p.id)
+            obj.put("code", p.code)
+            obj.put("name", p.name)
+            obj.put("category", p.category)
+            obj.put("buyPrice", p.buyPrice)
+            obj.put("sellPrice", p.sellPrice)
+            obj.put("stockQuantity", p.stockQuantity)
+            obj.put("sizes", p.sizes)
+            obj.put("colors", p.colors)
+            obj.put("barcode", p.barcode)
+            obj.put("minStockAlert", p.minStockAlert)
+            obj.put("updatedAt", p.updatedAt)
+            productsArray.put(obj)
+        }
+        data.put("products", productsArray)
+
+        // Customers Array
+        val customersArray = JSONArray()
+        for (c in customersList) {
+            val obj = JSONObject()
+            obj.put("id", c.id)
+            obj.put("fullName", c.fullName)
+            obj.put("phoneNumber", c.phoneNumber)
+            obj.put("currentDebt", c.currentDebt)
+            obj.put("totalPurchases", c.totalPurchases)
+            obj.put("loyaltyTier", c.loyaltyTier)
+            obj.put("notes", c.notes)
+            obj.put("createdAt", c.createdAt)
+            customersArray.put(obj)
+        }
+        data.put("customers", customersArray)
+
+        // Orders Array with itemized order items
+        val ordersArray = JSONArray()
+        for (o in ordersList) {
+            val obj = JSONObject()
+            obj.put("id", o.id)
+            obj.put("orderNumber", o.orderNumber)
+            obj.put("cashierName", o.cashierName)
+            obj.put("customerId", o.customerId ?: "")
+            obj.put("customerName", o.customerName ?: "")
+            obj.put("totalAmount", o.totalAmount)
+            obj.put("discountAmount", o.discountAmount)
+            obj.put("finalPayable", o.finalPayable)
+            obj.put("paymentType", o.paymentType)
+            obj.put("isSettled", o.isSettled)
+            obj.put("notes", o.notes)
+            obj.put("createdAt", o.createdAt)
+
+            val items = orderDao.getOrderItems(o.id)
+            val itemsArray = JSONArray()
+            for (item in items) {
+                val itemObj = JSONObject()
+                itemObj.put("id", item.id)
+                itemObj.put("productId", item.productId)
+                itemObj.put("productCode", item.productCode)
+                itemObj.put("productName", item.productName)
+                itemObj.put("unitPrice", item.unitPrice)
+                itemObj.put("quantity", item.quantity)
+                itemObj.put("selectedSize", item.selectedSize)
+                itemObj.put("selectedColor", item.selectedColor)
+                itemObj.put("subtotal", item.subtotal)
+                itemsArray.put(itemObj)
+            }
+            obj.put("items", itemsArray)
+            ordersArray.put(obj)
+        }
+        data.put("orders", ordersArray)
+
+        root.put("data", data)
+        return root.toString(2)
+    }
 
     // Customer & Debt management
     suspend fun saveCustomer(customer: Customer) {

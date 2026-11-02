@@ -8,6 +8,7 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import com.example.R
+import com.example.data.local.AppDatabase
 import com.example.data.model.Customer
 import com.example.data.model.Order
 import com.example.data.model.Product
@@ -20,7 +21,11 @@ import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import org.json.JSONArray
 import org.json.JSONObject
@@ -69,7 +74,112 @@ class FirebaseSyncManager(private val context: Context) {
         }
     }
 
+    private var productsListener: ListenerRegistration? = null
+    private var ordersListener: ListenerRegistration? = null
+    private var customersListener: ListenerRegistration? = null
+
+    fun startRealtimeSync(db: AppDatabase, scope: CoroutineScope) {
+        val user = currentUser ?: return
+        val uid = user.uid
+        val userDocRef = firestore.collection("users").document(uid)
+
+        stopRealtimeSync()
+
+        // 1. Products listener (receives items added/edited from web or 2nd cashier)
+        productsListener = userDocRef.collection("products").addSnapshotListener { snapshot, error ->
+            if (error != null || snapshot == null) return@addSnapshotListener
+            scope.launch(Dispatchers.IO) {
+                for (doc in snapshot.documents) {
+                    try {
+                        val product = Product(
+                            id = doc.getString("id") ?: doc.id,
+                            code = doc.getString("code") ?: "",
+                            name = doc.getString("name") ?: "",
+                            category = doc.getString("category") ?: "عمومی",
+                            buyPrice = doc.getLong("buyPrice") ?: 0L,
+                            sellPrice = doc.getLong("sellPrice") ?: 0L,
+                            stockQuantity = (doc.getLong("stockQuantity") ?: 0L).toInt(),
+                            sizes = doc.getString("sizes") ?: "M, L, XL",
+                            colors = doc.getString("colors") ?: "",
+                            barcode = doc.getString("barcode") ?: "",
+                            minStockAlert = (doc.getLong("minStockAlert") ?: 3L).toInt(),
+                            updatedAt = doc.getLong("updatedAt") ?: System.currentTimeMillis(),
+                            isSynced = true
+                        )
+                        db.productDao().insertProduct(product)
+                    } catch (e: Exception) {
+                        Log.e("FirebaseSync", "Error parsing remote product: ${e.message}")
+                    }
+                }
+            }
+        }
+
+        // 2. Customers listener
+        customersListener = userDocRef.collection("customers").addSnapshotListener { snapshot, error ->
+            if (error != null || snapshot == null) return@addSnapshotListener
+            scope.launch(Dispatchers.IO) {
+                for (doc in snapshot.documents) {
+                    try {
+                        val customer = Customer(
+                            id = doc.getString("id") ?: doc.id,
+                            fullName = doc.getString("fullName") ?: "",
+                            phoneNumber = doc.getString("phoneNumber") ?: "",
+                            currentDebt = doc.getLong("currentDebt") ?: 0L,
+                            totalPurchases = doc.getLong("totalPurchases") ?: 0L,
+                            loyaltyTier = doc.getString("loyaltyTier") ?: "عادی",
+                            notes = doc.getString("notes") ?: "",
+                            createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis(),
+                            isSynced = true
+                        )
+                        db.customerDao().insertCustomer(customer)
+                    } catch (e: Exception) {
+                        Log.e("FirebaseSync", "Error parsing remote customer: ${e.message}")
+                    }
+                }
+            }
+        }
+
+        // 3. Orders listener (sales from other seller or web app)
+        ordersListener = userDocRef.collection("orders").addSnapshotListener { snapshot, error ->
+            if (error != null || snapshot == null) return@addSnapshotListener
+            scope.launch(Dispatchers.IO) {
+                for (doc in snapshot.documents) {
+                    try {
+                        val order = Order(
+                            id = doc.getString("id") ?: doc.id,
+                            orderNumber = doc.getLong("orderNumber") ?: 1001L,
+                            cashierName = doc.getString("cashierName") ?: "صندوقدار",
+                            customerId = doc.getString("customerId"),
+                            customerName = doc.getString("customerName"),
+                            totalAmount = doc.getLong("totalAmount") ?: 0L,
+                            discountAmount = doc.getLong("discountAmount") ?: 0L,
+                            finalPayable = doc.getLong("finalPayable") ?: 0L,
+                            paymentType = doc.getString("paymentType") ?: "POS",
+                            isSettled = doc.getBoolean("isSettled") ?: true,
+                            notes = doc.getString("notes") ?: "",
+                            createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis(),
+                            isSynced = true
+                        )
+                        db.orderDao().insertOrder(order)
+                    } catch (e: Exception) {
+                        Log.e("FirebaseSync", "Error parsing remote order: ${e.message}")
+                    }
+                }
+            }
+        }
+    }
+
+    fun stopRealtimeSync() {
+        productsListener?.remove()
+        productsListener = null
+        ordersListener?.remove()
+        ordersListener = null
+        customersListener?.remove()
+        customersListener = null
+    }
+
     fun signOut() {
+        stopRealtimeSync()
         auth.signOut()
     }
 
