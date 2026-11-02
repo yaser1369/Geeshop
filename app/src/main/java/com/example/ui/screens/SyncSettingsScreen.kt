@@ -34,6 +34,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import android.app.Activity
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -85,6 +88,120 @@ fun SyncSettingsScreen(
             .verticalScroll(rememberScrollState())
             .padding(14.dp)
     ) {
+        val firebaseUser by viewModel.firebaseUser.collectAsState()
+        val isSyncing by viewModel.isSyncing.collectAsState()
+
+        // Section 0: Firebase Cloud Backup & Synchronization
+        Text(
+            text = "پشتیبان‌گیری ابری و فایربیس (Firebase Firestore)",
+            fontWeight = FontWeight.Bold,
+            fontSize = 15.sp,
+            color = TextPrimary
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth().testTag("firebase_cloud_card"),
+            colors = CardDefaults.cardColors(containerColor = GhoghnousSurfaceCard),
+            shape = RoundedCornerShape(14.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, GhoghnousCyan.copy(alpha = 0.5f))
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CloudSync, contentDescription = null, tint = GhoghnousCyan)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "پایگاه داده ابری فایربیس",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = GhoghnousCyan
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (firebaseUser != null) Color(0xFF0F3B2C) else Color(0xFF38140E))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = if (firebaseUser != null) "متصل به فایربیس" else "آفلاین / بدون اکانت",
+                            color = if (firebaseUser != null) Color(0xFF10B981) else PhoenixGold,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = if (firebaseUser != null)
+                        "حساب گوگل متصل: ${firebaseUser?.email ?: ""}\nاطلاعات شما در دیتابیس محلی دستگاه ذخیره است و با زدن دکمه زیر در فضای ابری فایربیس نیز پشتیبان‌گیری می‌شود."
+                    else
+                        "داده‌ها هم‌اکنون به صورت دائمی در دیتابیس محلی (Room SQLite) گوشی ذخیره می‌شوند. جهت اتصال به فضای ابری فایربیس و پشتیبان‌گیری، با حساب گوگل وارد شوید.",
+                    fontSize = 12.sp,
+                    color = TextSecondary,
+                    lineHeight = 18.sp
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (firebaseUser == null) {
+                        Button(
+                            onClick = {
+                                if (context is Activity) {
+                                    viewModel.signInWithGoogle(context)
+                                }
+                            },
+                            enabled = !isSyncing,
+                            colors = ButtonDefaults.buttonColors(containerColor = GhoghnousCyan),
+                            modifier = Modifier.weight(1f).testTag("sign_in_google_button")
+                        ) {
+                            if (isSyncing) {
+                                CircularProgressIndicator(color = Color(0xFF07151D), modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            } else {
+                                Text("ورود با حساب گوگل", color = Color(0xFF07151D), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+                    } else {
+                        Button(
+                            onClick = { viewModel.backupToFirebase() },
+                            enabled = !isSyncing,
+                            colors = ButtonDefaults.buttonColors(containerColor = PhoenixOrange),
+                            modifier = Modifier.weight(1.2f).testTag("backup_firebase_button")
+                        ) {
+                            if (isSyncing) {
+                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("پشتیبان‌گیری در فایربیس", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        OutlinedButton(
+                            onClick = { viewModel.signOutGoogle() },
+                            modifier = Modifier.weight(0.8f).testTag("sign_out_google_button")
+                        ) {
+                            Text("خروج حساب", fontSize = 11.sp, color = TextMuted)
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         // Section 1: Security & PIN Management
         Text(
             text = "امنیت و تغییر رمزها",

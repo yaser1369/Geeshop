@@ -44,6 +44,14 @@ data class CompletedReceiptState(
 class ShopViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: ShopRepository = ShopRepository(AppDatabase.getDatabase(application))
+    val firebaseSyncManager = com.example.data.firebase.FirebaseSyncManager(application)
+
+    // Firebase Auth user state
+    private val _firebaseUser = MutableStateFlow<com.google.firebase.auth.FirebaseUser?>(firebaseSyncManager.currentUser)
+    val firebaseUser: StateFlow<com.google.firebase.auth.FirebaseUser?> = _firebaseUser.asStateFlow()
+
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
     // Active User Role: "ADMIN" or "SELLER"
     private val _currentRole = MutableStateFlow("ADMIN")
@@ -399,6 +407,50 @@ class ShopViewModel(application: Application) : AndroidViewModel(application) {
             repository.updatePin(role, newPin)
             _toastEvent.emit("رمز عبور ${if (role == "ADMIN") "مدیر" else "فروشنده"} با موفقیت تغییر کرد")
             onSuccess()
+        }
+    }
+
+    // Firebase Cloud Sync & Backup Actions
+    fun signInWithGoogle(activity: android.app.Activity) {
+        viewModelScope.launch {
+            _isSyncing.value = true
+            val result = firebaseSyncManager.signInWithGoogle(activity)
+            _isSyncing.value = false
+            result.onSuccess { user ->
+                _firebaseUser.value = user
+                _toastEvent.emit("اتصال به حساب گوگل با موفقیت انجام شد: ${user.email ?: ""}")
+            }.onFailure { err ->
+                _toastEvent.emit("خطا در ورود به گوگل: ${err.message}")
+            }
+        }
+    }
+
+    fun signOutGoogle() {
+        firebaseSyncManager.signOut()
+        _firebaseUser.value = null
+        viewModelScope.launch {
+            _toastEvent.emit("از حساب گوگل خارج شدید")
+        }
+    }
+
+    fun backupToFirebase() {
+        viewModelScope.launch {
+            if (_firebaseUser.value == null) {
+                _toastEvent.emit("جهت پشتیبان‌گیری ابری، لطفاً ابتدا وارد حساب گوگل شوید.")
+                return@launch
+            }
+            _isSyncing.value = true
+            val result = firebaseSyncManager.backupToCloud(
+                products = allProducts.value,
+                orders = allOrders.value,
+                customers = allCustomers.value
+            )
+            _isSyncing.value = false
+            result.onSuccess { msg ->
+                _toastEvent.emit(msg)
+            }.onFailure { err ->
+                _toastEvent.emit("خطا در پشتیبان‌گیری فایربیس: ${err.message}")
+            }
         }
     }
 

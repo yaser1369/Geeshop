@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "Clothing store inventory item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "buyPrice": { "type": "integer" },
+        "sellPrice": { "type": "integer" },
+        "stockQuantity": { "type": "integer" },
+        "sizes": { "type": "string" },
+        "colors": { "type": "string" },
+        "barcode": { "type": "string" },
+        "minStockAlert": { "type": "integer" },
+        "updatedAt": { "type": "integer" }
+      },
+      "required": ["id", "code", "name", "sellPrice"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Completed sales receipt",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderNumber": { "type": "integer" },
+        "cashierName": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "totalAmount": { "type": "integer" },
+        "discountAmount": { "type": "integer" },
+        "finalPayable": { "type": "integer" },
+        "paymentType": { "type": "string" },
+        "isSettled": { "type": "boolean" },
+        "createdAt": { "type": "integer" }
+      },
+      "required": ["id", "orderNumber", "finalPayable", "paymentType"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Store customer and debtor account",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fullName": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "currentDebt": { "type": "integer" },
+        "totalPurchases": { "type": "integer" },
+        "loyaltyTier": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "integer" }
+      },
+      "required": ["id", "fullName"]
+    },
+    "BackupSnapshot": {
+      "title": "BackupSnapshot",
+      "description": "Full store backup metadata and JSON payload",
+      "type": "object",
+      "properties": {
+        "backupId": { "type": "string" },
+        "timestamp": { "type": "integer" },
+        "productsCount": { "type": "integer" },
+        "ordersCount": { "type": "integer" },
+        "customersCount": { "type": "integer" },
+        "dataJson": { "type": "string" }
+      },
+      "required": ["backupId", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/products/{productId}": {
+      "schema": "Product",
+      "description": "User's store inventory items synced to cloud"
+    },
+    "/users/{userId}/orders/{orderId}": {
+      "schema": "Order",
+      "description": "User's sales orders synced to cloud"
+    },
+    "/users/{userId}/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "User's customers and debtors synced to cloud"
+    },
+    "/users/{userId}/backups/{backupId}": {
+      "schema": "BackupSnapshot",
+      "description": "User's complete shop backup snapshots"
+    }
+  }
+}
